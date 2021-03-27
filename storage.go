@@ -1,6 +1,5 @@
 package gosimstor
 
-
 import (
 	"errors"
 	concurrentMap "github.com/streamrail/concurrent-map"
@@ -45,7 +44,7 @@ func Destructor(storage *Storage) error {
 	return nil
 }
 
-func (storage *Storage) Insert(providerKey string, id, data interface{}) error {
+func (storage *Storage) Insert(providerKey string, row Row) error {
 	var (
 		provider *fileProvider
 	)
@@ -54,25 +53,23 @@ func (storage *Storage) Insert(providerKey string, id, data interface{}) error {
 	} else {
 		provider = inter.(*fileProvider)
 	}
-	return provider.Insert(
-		id,
-		data,
-	)
+	return provider.Insert(row)
 }
 
-func (storage *Storage) Read(providerKey string, id interface{}) (interface{}, interface{}, error) {
+func (storage *Storage) Read(providerKey string, id interface{}) (Row, error) {
 	var (
+		row      Row
 		provider *fileProvider
 	)
 	if inter, exist := storage.fileStorage.Get(providerKey); !exist {
-		return nil, nil, errors.New("FILE PROVIDER ISN'T EXIST. ")
+		return row, errors.New("FILE PROVIDER ISN'T EXIST. ")
 	} else {
 		provider = inter.(*fileProvider)
 	}
 	return provider.Read(id)
 }
 
-func (storage *Storage) Update(providerKey string, id, data interface{}) error {
+func (storage *Storage) Update(providerKey string, row Row) error {
 	var (
 		provider *fileProvider
 	)
@@ -81,13 +78,10 @@ func (storage *Storage) Update(providerKey string, id, data interface{}) error {
 	} else {
 		provider = inter.(*fileProvider)
 	}
-	return provider.Update(
-		id,
-		data,
-	)
+	return provider.Update(row)
 }
 
-func (storage *Storage) Rewrite(providerKey string, id, data []interface{}) error {
+func (storage *Storage) Rewrite(providerKey string, rows []Row) error {
 	var (
 		provider *fileProvider
 	)
@@ -96,10 +90,7 @@ func (storage *Storage) Rewrite(providerKey string, id, data []interface{}) erro
 	} else {
 		provider = inter.(*fileProvider)
 	}
-	return provider.Rewrite(
-		id,
-		data,
-	)
+	return provider.Rewrite(rows)
 }
 
 func (storage *Storage) GetIDs(providerKey string) ([]string, error) {
@@ -113,3 +104,16 @@ func (storage *Storage) GetIDs(providerKey string) ([]string, error) {
 	}
 	return provider.GetIDs(), nil
 }
+
+//func (storage *Storage) ReadAll(providerKey string) ([]Row, error) {
+//	var (
+//		rows     []Row
+//		provider *fileProvider
+//	)
+//	if inter, exist := storage.fileStorage.Get(providerKey); !exist {
+//		return rows, errors.New("FILE PROVIDER ISN'T EXIST. ")
+//	} else {
+//		provider = inter.(*fileProvider)
+//	}
+//	return provider.ReadAll()
+//}

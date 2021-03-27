@@ -1,6 +1,5 @@
 package gosimstor
 
-
 import (
 	"bufio"
 	"errors"
@@ -45,14 +44,14 @@ func NewFileProvider(fileStorageName, directory string, maxLengthIncrement int64
 		provider.convertIdFromString = convertIdFromString
 		provider.lastPointer = int64(0)
 		provider.maxLengthLine = maxLengthIncrement * MAXLENGTH
-		if err := provider.findFileInDirectory(); err != nil {
+		if err := provider.initProvider(); err != nil {
 			return nil, err
 		}
 		return provider, nil
 	}
 }
 
-func (provider *fileProvider) findFileInDirectory() error {
+func (provider *fileProvider) initProvider() error {
 	var (
 		exist              = false
 		fileName, filePath string
@@ -111,21 +110,21 @@ func (provider *fileProvider) findFileInDirectory() error {
 	return nil
 }
 
-func (provider *fileProvider) Insert(id, data interface{}) error {
+func (provider *fileProvider) Insert(row Row) error {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	var (
 		pointer = provider.lastPointer
 		line    string
 	)
-	stringID, err := provider.convertID(id)
+	stringID, err := provider.convertID(row.ID)
 	if err != nil {
 		return err
 	}
 	if exist := provider.pointers.Has(stringID); exist {
 		return errors.New("KEY IS EXIST. ")
 	}
-	stringData, err := provider.convertData(data)
+	stringData, err := provider.convertData(row.Data)
 	if err != nil {
 		return err
 	}
@@ -143,40 +142,43 @@ func (provider *fileProvider) Insert(id, data interface{}) error {
 	return err
 }
 
-func (provider *fileProvider) Read(id interface{}) (interface{}, interface{}, error) {
+func (provider *fileProvider) Read(id interface{}) (Row, error) {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	var (
+		row Row
 		convertID, convertData interface{}
 		stringID, stringData   string
 	)
 	stringID, stringData, _, err := provider.readLine(id)
 	if err != nil {
-		return convertID, convertData, err
+		return row, err
 	}
 	convertData, err = provider.convertDataFromString(stringData)
 	if err != nil {
-		return convertID, convertData, err
+		return row, err
 	}
 	convertID, err = provider.convertIdFromString(stringID)
 	if err != nil {
-		return convertID, convertData, err
+		return row, err
 	}
-	return convertID, convertData, nil
+	row.ID = convertID
+	row.Data = convertData
+	return row, nil
 }
 
-func (provider *fileProvider) Update(id, data interface{}) error {
+func (provider *fileProvider) Update(row Row) error {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	var (
 		pointer                    int64
 		stringID, stringData, line string
 	)
-	stringID, _, pointer, err := provider.readLine(id)
+	stringID, _, pointer, err := provider.readLine(row.ID)
 	if err != nil {
 		return err
 	}
-	stringData, err = provider.convertData(data)
+	stringData, err = provider.convertData(row.Data)
 	if err != nil {
 		return err
 	}
@@ -189,7 +191,7 @@ func (provider *fileProvider) Update(id, data interface{}) error {
 	return err
 }
 
-func (provider *fileProvider) Rewrite(id, data []interface{}) error {
+func (provider *fileProvider) Rewrite(rows []Row) error {
 	provider.mx.Lock()
 	var (
 		errRewritingFiles error
@@ -223,19 +225,19 @@ func (provider *fileProvider) Rewrite(id, data []interface{}) error {
 	if err != nil {
 		return err
 	}
-	for i := 0; i < len(id); i++ {
+	for i := 0; i < len(rows); i++ {
 		var (
 			stringID, stringData, line string
 			pointer                    int64
 		)
-		stringID, err := provider.convertID(id[i])
+		stringID, err := provider.convertID(rows[i].ID)
 		if err != nil {
 			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
 				err = e
 			}
 			return err
 		}
-		stringData, err = provider.convertData(data[i])
+		stringData, err = provider.convertData(rows[i].Data)
 		if err != nil {
 			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
 				err = e
@@ -282,6 +284,56 @@ func (provider *fileProvider) GetIDs() []string {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	return provider.pointers.Keys()
+}
+
+func (provider *fileProvider) ReadAll() ([]Row, error) {
+	provider.mx.Lock()
+	defer provider.mx.Unlock()
+	var(
+		rows = make([]Row, 0)
+	)
+	scanner := bufio.NewScanner(provider.file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		var(
+			row Row
+			err error
+			convertID, convertData interface{}
+			stringID, stringData string
+		)
+		line = strings.Split(line, "|")[0]
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if strings.Contains(line, "=") {
+			split := strings.Split(line, "=")
+			stringID = split[0]
+			if strings.TrimSpace(stringID) == "" {
+				continue
+			}
+			stringData = split[1]
+			if strings.TrimSpace(stringData) == "" {
+				continue
+			}
+		} else {
+			continue
+		}
+		convertData, err = provider.convertDataFromString(stringData)
+		if err != nil {
+			continue
+		}
+		convertID, err = provider.convertIdFromString(stringID)
+		if err != nil {
+			continue
+		}
+		row.ID = convertID
+		row.Data = convertData
+		rows = append(rows, row)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (provider *fileProvider) rewriteFile(tempFilePath string, tempFile *os.File) error {

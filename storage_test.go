@@ -1,6 +1,5 @@
 package gosimstor
 
-
 import (
 	"log"
 	"os"
@@ -66,61 +65,78 @@ func TestReadFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Println("START READ UPDATE................................................")
+	log.Println("START READ BY KEYS................................................")
 	for _, key := range keys {
-		id, data, err := storage.Read(
+		row, err := storage.Read(
 			"bagwords",
 			key,
 		)
 		if err != nil {
 			t.Fatal(err)
 		} else {
-			log.Println("READ ID ", id, " WITH DATA ", data)
+			log.Println("READ ID ", row.ID, " WITH DATA ", row.Data)
 		}
 	}
-	log.Println("FINISH READ UPDATE................................................")
+	log.Println("FINISH READ BY KEYS................................................")
 }
 
+//func TestReadAllFlow(t *testing.T) {
+//	rows, err := storage.ReadAll("bagwords")
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	if len(rows) == 0 {
+//		t.Fatal("ROWS SLICE SIZE 0")
+//	}
+//	log.Println("START READ ALL................................................")
+//	for _, row := range rows {
+//		log.Println("READ ID ", row.ID, " WITH DATA ", row.Data)
+//	}
+//	log.Println("FINISH READ ALL................................................")
+//}
+
 func TestInsertReadUpdateFlow(t *testing.T) {
-	keys := make([]string, 0)
+	rows := make([]Row, 0)
 	log.Println("START WRITE................................................")
 	for i := 0; i < 10; i++ {
-		inc := strconv.Itoa(i)
-		key := "Key" + inc
-		data := []float64{
-			1.2 * float64(i), 3.4 * float64(i),
+		row := Row{
+			ID: "Key" + strconv.Itoa(i),
+			Data: []float64{
+				1.2 * float64(i), 3.4 * float64(i),
+			},
 		}
 		err := storage.Insert(
 			"bagwords",
-			key,
-			data,
+			row,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		keys = append(keys, key)
+		rows = append(rows, row)
 	}
 	log.Println("FINISH WRITE................................................")
 	log.Println("START READ................................................")
-	for _, key := range keys {
-		id, data, err := storage.Read(
+	for _, row := range rows {
+		r, err := storage.Read(
 			"bagwords",
-			key,
+			row.ID,
 		)
 		if err != nil {
 			t.Fatal(err)
 		} else {
-			log.Println("READ ID ", id, " WITH DATA ", data)
+			log.Println("READ ID ", r.ID, " WITH DATA ", r.Data)
 		}
 	}
 	log.Println("FINISH READ................................................")
 	log.Println("START UPDATE................................................")
-	for _, key := range keys {
+	for _, row := range rows {
 		err := storage.Update(
 			"bagwords",
-			key,
-			[]float64{
-				1.2 * float64(-1), 3.4 * float64(-1),
+			Row{
+				ID: row.ID,
+				Data: []float64{
+					1.2 * float64(-1), 3.4 * float64(-1),
+				},
 			},
 		)
 		if err != nil {
@@ -129,15 +145,15 @@ func TestInsertReadUpdateFlow(t *testing.T) {
 	}
 	log.Println("FINISH UPDATE................................................")
 	log.Println("START READ UPDATE................................................")
-	for _, key := range keys {
-		id, data, err := storage.Read(
+	for _, row := range rows {
+		r, err := storage.Read(
 			"bagwords",
-			key,
+			row.ID,
 		)
 		if err != nil {
 			t.Fatal(err)
 		} else {
-			log.Println("READ ID ", id, " WITH DATA ", data)
+			log.Println("READ ID ", r.ID, " WITH DATA ", r.Data)
 		}
 	}
 	log.Println("FINISH READ UPDATE................................................")
@@ -145,62 +161,46 @@ func TestInsertReadUpdateFlow(t *testing.T) {
 
 func TestRewriteFlow(t *testing.T) {
 	var (
-		count        = 10
-		id           = make([]string, 0)
-		data         = make([][]float64, count+1)
-		createIdList = func() {
+		count      = 10
+		rows       = make([]Row, 0)
+		createRows = func() {
 			for i := 0; i < count; i++ {
 				inc := strconv.Itoa(i)
 				key := "Key" + inc
-				id = append(id, key)
-			}
-		}
-		createDataList = func() {
-			for i := 0; i < count; i++ {
 				vector := make([]float64, count)
 				for j := 0; j < count; j++ {
 					vector[j] = float64(j * i)
 				}
-				data[i] = vector
+				rows = append(rows, Row{
+					ID:   key,
+					Data: vector,
+				})
 			}
 		}
-		update = func() {
+		updateRows = func() {
 			for i := 0; i < count; i++ {
+				vector := rows[i].Data.([]float64)
 				for j := 0; j < count; j++ {
-					data[i][j] = data[i][j] * float64(-1)
+					vector[j] = vector[j] * float64(-1)
 				}
-				data[i] = append(data[i], float64(0))
+				rows[i].Data = append(rows[i].Data.([]float64), float64(0))
 			}
 			vector := make([]float64, count+1)
 			for i := 0; i < count+1; i++ {
 				vector[i] = float64(0)
 			}
-			data[count] = vector
-			id = append(id, "Key"+strconv.Itoa(count))
-		}
-		convertDataToSliceInterface = func() []interface{} {
-			d := make([]interface{}, 0)
-			for i := 0; i < len(data); i++ {
-				d = append(d, data[i])
-			}
-			return d
-		}
-		convertIdToSliceInterface = func() []interface{} {
-			d := make([]interface{}, 0)
-			for i := 0; i < len(id); i++ {
-				d = append(d, id[i])
-			}
-			return d
+			rows = append(rows, Row{
+				ID:   "Key" + strconv.Itoa(count),
+				Data: vector,
+			})
 		}
 	)
-	createIdList()
-	createDataList()
+	createRows()
 	log.Println("START WRITE................................................")
-	for i := 0; i < len(id); i++ {
+	for i := 0; i < len(rows); i++ {
 		err := storage.Insert(
 			"bagwords",
-			id[i],
-			data[i],
+			rows[i],
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -209,26 +209,25 @@ func TestRewriteFlow(t *testing.T) {
 	log.Println("FINISH WRITE................................................")
 	//
 	log.Println("START READ................................................")
-	for i := 0; i < len(id); i++ {
-		id, data, err := storage.Read(
+	for i := 0; i < len(rows); i++ {
+		row, err := storage.Read(
 			"bagwords",
-			id[i],
+			rows[i].ID,
 		)
 		if err != nil {
 			t.Fatal(err)
 		} else {
-			log.Println("READ ID ", id, " WITH DATA ", data)
+			log.Println("READ ID ", row.ID, " WITH DATA ", row.Data)
 		}
 	}
 	log.Println("FINISH READ................................................")
 	//
-	update()
+	updateRows()
 	//
 	log.Println("START REWRITE................................................")
 	err := storage.Rewrite(
 		"bagwords",
-		convertIdToSliceInterface(),
-		convertDataToSliceInterface(),
+		rows,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -236,15 +235,15 @@ func TestRewriteFlow(t *testing.T) {
 	log.Println("FINISH REWRITE................................................")
 	//
 	log.Println("START READ................................................")
-	for i := 0; i < len(id); i++ {
-		id, data, err := storage.Read(
+	for i := 0; i < len(rows); i++ {
+		row, err := storage.Read(
 			"bagwords",
-			id[i],
+			rows[i].ID,
 		)
 		if err != nil {
 			t.Fatal(err)
 		} else {
-			log.Println("READ ID ", id, " WITH DATA ", data)
+			log.Println("READ ID ", row.ID, " WITH DATA ", row.Data)
 		}
 	}
 	log.Println("FINISH READ................................................")
@@ -260,8 +259,10 @@ func BenchmarkWriting(b *testing.B) {
 		}
 		_ = storage.Insert(
 			"bench",
-			key,
-			data,
+			Row{
+				ID:   key,
+				Data: data,
+			},
 		)
 		//if err != nil {
 		//	log.Println("i = ",i, " err: ", err)
@@ -274,12 +275,14 @@ func BenchmarkReading(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		inc := strconv.Itoa(i)
 		key := "Key" + inc
-		_, _, _ = storage.Read(
+		_, _ = storage.Read(
 			"bench",
 			key,
 		)
 		//if err != nil {
 		//	log.Println("i = ",i, " err: ", err)
+		//} else {
+		//	// log.Println("READ ID ", row.ID, " WITH DATA ", row.Data)
 		//}
 	}
 }
@@ -291,9 +294,11 @@ func BenchmarkUpdate(b *testing.B) {
 		key := "Key" + inc
 		_ = storage.Update(
 			"bench",
-			key,
-			[]float64{
-				1.2 * float64(-1), 3.4 * float64(-1),
+			Row{
+				ID: key,
+				Data: []float64{
+					1.2 * float64(-1), 3.4 * float64(-1),
+				},
 			},
 		)
 		//if err != nil {
@@ -301,3 +306,16 @@ func BenchmarkUpdate(b *testing.B) {
 		//}
 	}
 }
+
+//func BenchmarkReadAll(b *testing.B) {
+//	b.ReportAllocs()
+//	for i := 0; i < b.N; i++ {
+//		rows, err := storage.ReadAll("bench")
+//		if err != nil {
+//			log.Println(err)
+//		}
+//		if len(rows) == 0 {
+//			log.Println("SIZE IS 0")
+//		}
+//	}
+//}
