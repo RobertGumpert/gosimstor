@@ -80,7 +80,7 @@ func (provider *fileProvider) findFileInDirectory() error {
 				strings.Join(
 					[]string{
 						fileName,
-						"simply",
+						"simstor",
 					},
 					".",
 				),
@@ -306,13 +306,13 @@ func (provider *fileProvider) createTempFile() (string, *os.File, error) {
 			provider.filePath,
 			strings.Join([]string{
 				provider.fileStorageName,
-				"simply",
+				"simstor",
 			}, "."),
 			strings.Join([]string{
 				provider.fileStorageName,
 				"-rewrite-at-",
 				strconv.FormatInt(time.Now().Unix(), 16),
-				".simply",
+				".simstor",
 			}, ""),
 		)
 	)

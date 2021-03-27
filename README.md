@@ -128,3 +128,32 @@ err := storage.Update(
 	}, 
 )
 ```
+
+# Benchmarks
+
+CPU: i3-5005U 2.00GHz, cores 2
+Memory: SSD Samsung 860 EVO
+
+### Insert:
+
+```go
+BenchmarkWriting
+BenchmarkWriting-4   	   10938	    137594 ns/op	   93008 B/op	      18 allocs/op
+PASS
+```
+
+### Read:
+
+```go
+BenchmarkReading
+BenchmarkReading-4   	  606358	      1714 ns/op	    3178 B/op	       5 allocs/op
+PASS
+```
+
+### Update:
+
+```go
+BenchmarkUpdate
+BenchmarkUpdate-4   	    6516	    182397 ns/op	  194475 B/op	      35 allocs/op
+PASS
+```
