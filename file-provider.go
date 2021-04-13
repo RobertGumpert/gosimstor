@@ -191,6 +191,27 @@ func (provider *fileProvider) Update(row Row) error {
 	return err
 }
 
+func (provider *fileProvider) UpdateAll(rows []Row) error {
+	provider.mx.Lock()
+	defer provider.mx.Unlock()
+	err := provider.file.Truncate(0)
+	if err != nil {
+		return err
+	}
+	_, err = provider.file.Seek(0,0)
+	if err != nil {
+		return err
+	}
+	provider.pointers = concurrentMap.New()
+	for i := 0; i < len(rows); i++ {
+		err := provider.Insert(rows[i])
+		if err != nil {
+			log.Println("ERR: ", err, "; ROW: ", rows[i])
+		}
+	}
+	return nil
+}
+
 func (provider *fileProvider) Rewrite(rows []Row) error {
 	provider.mx.Lock()
 	var (
@@ -277,6 +298,7 @@ func (provider *fileProvider) Rewrite(rows []Row) error {
 	for item := range newDataBuffer.IterBuffered() {
 		provider.pointers.Set(item.Key, item.Val.(int64))
 	}
+	provider.mx.Unlock()
 	return nil
 }
 

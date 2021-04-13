@@ -81,6 +81,18 @@ func (storage *Storage) Update(providerKey string, row Row) error {
 	return provider.Update(row)
 }
 
+func (storage *Storage) UpdateAll(providerKey string, rows []Row) error {
+	var (
+		provider *fileProvider
+	)
+	if inter, exist := storage.fileStorage.Get(providerKey); !exist {
+		return errors.New("FILE PROVIDER ISN'T EXIST. ")
+	} else {
+		provider = inter.(*fileProvider)
+	}
+	return provider.UpdateAll(rows)
+}
+
 func (storage *Storage) Rewrite(providerKey string, rows []Row) error {
 	var (
 		provider *fileProvider
