@@ -113,6 +113,10 @@ func (provider *fileProvider) initProvider() error {
 func (provider *fileProvider) Insert(row Row) error {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
+	return provider.insert(row)
+}
+
+func (provider *fileProvider) insert(row Row) error {
 	var (
 		pointer = provider.lastPointer
 		line    string
@@ -145,8 +149,12 @@ func (provider *fileProvider) Insert(row Row) error {
 func (provider *fileProvider) Read(id interface{}) (Row, error) {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
+	return provider.read(id)
+}
+
+func (provider *fileProvider) read(id interface{}) (Row, error) {
 	var (
-		row Row
+		row                    Row
 		convertID, convertData interface{}
 		stringID, stringData   string
 	)
@@ -170,6 +178,10 @@ func (provider *fileProvider) Read(id interface{}) (Row, error) {
 func (provider *fileProvider) Update(row Row) error {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
+	return provider.update(row)
+}
+
+func (provider *fileProvider) update(row Row) error {
 	var (
 		pointer                    int64
 		stringID, stringData, line string
@@ -198,13 +210,13 @@ func (provider *fileProvider) UpdateAll(rows []Row) error {
 	if err != nil {
 		return err
 	}
-	_, err = provider.file.Seek(0,0)
+	_, err = provider.file.Seek(0, 0)
 	if err != nil {
 		return err
 	}
 	provider.pointers = concurrentMap.New()
 	for i := 0; i < len(rows); i++ {
-		err := provider.Insert(rows[i])
+		err := provider.insert(rows[i])
 		if err != nil {
 			log.Println("ERR: ", err, "; ROW: ", rows[i])
 		}
@@ -279,9 +291,9 @@ func (provider *fileProvider) Rewrite(rows []Row) error {
 			return err
 		}
 		if iter, exist := newDataBuffer.Get(stringID); exist {
-			pointer = iter.(int64)*provider.maxLengthLine
+			pointer = iter.(int64) * provider.maxLengthLine
 		} else {
-			pointer = pointer*provider.maxLengthLine
+			pointer = pointer * provider.maxLengthLine
 		}
 		_, err = tempFile.WriteAt([]byte(line), pointer)
 		if err != nil {
@@ -311,17 +323,17 @@ func (provider *fileProvider) GetIDs() []string {
 func (provider *fileProvider) ReadAll() ([]Row, error) {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
-	var(
+	var (
 		rows = make([]Row, 0)
 	)
 	scanner := bufio.NewScanner(provider.file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		var(
-			row Row
-			err error
+		var (
+			row                    Row
+			err                    error
 			convertID, convertData interface{}
-			stringID, stringData string
+			stringID, stringData   string
 		)
 		line = strings.Split(line, "|")[0]
 		if strings.TrimSpace(line) == "" {
