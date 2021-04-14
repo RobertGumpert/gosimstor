@@ -7,10 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 const (
@@ -203,7 +201,7 @@ func (provider *fileProvider) update(row Row) error {
 	return err
 }
 
-func (provider *fileProvider) UpdateAll(rows []Row) error {
+func (provider *fileProvider) Rewrite(rows []Row) error {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	err := provider.file.Truncate(0)
@@ -224,201 +222,10 @@ func (provider *fileProvider) UpdateAll(rows []Row) error {
 	return nil
 }
 
-func (provider *fileProvider) Rewrite(rows []Row) error {
-	provider.mx.Lock()
-	var (
-		errRewritingFiles error
-		newDataBuffer     = concurrentMap.New()
-		tempFilePath      string
-		tempFile          *os.File
-	)
-	defer func() {
-		if errRewritingFiles != nil {
-			var (
-				file *os.File
-				err  error
-			)
-			file, err = os.OpenFile(provider.filePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
-			if err != nil {
-				file, err = os.Create(provider.filePath)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-			}
-			provider.file = file
-			if err := provider.deleteTempFile(tempFilePath, tempFile); err != nil {
-				log.Println(err)
-			}
-		}
-		provider.mx.Unlock()
-		return
-	}()
-	tempFilePath, tempFile, err := provider.createTempFile()
-	if err != nil {
-		return err
-	}
-	for i := 0; i < len(rows); i++ {
-		var (
-			stringID, stringData, line string
-			pointer                    int64
-		)
-		stringID, err := provider.convertID(rows[i].ID)
-		if err != nil {
-			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
-				err = e
-			}
-			return err
-		}
-		stringData, err = provider.convertData(rows[i].Data)
-		if err != nil {
-			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
-				err = e
-			}
-			return err
-		}
-		if inter, exist := provider.pointers.Get(stringID); !exist {
-			newDataBuffer.Set(stringID, provider.lastPointer)
-			pointer = provider.lastPointer + 1
-		} else {
-			pointer = inter.(int64)
-		}
-		line, err = provider.createLine(stringID, stringData)
-		if err != nil {
-			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
-				err = e
-			}
-			return err
-		}
-		if iter, exist := newDataBuffer.Get(stringID); exist {
-			pointer = iter.(int64) * provider.maxLengthLine
-		} else {
-			pointer = pointer * provider.maxLengthLine
-		}
-		_, err = tempFile.WriteAt([]byte(line), pointer)
-		if err != nil {
-			if e := provider.deleteTempFile(tempFilePath, tempFile); e != nil {
-				err = e
-			}
-			return err
-		}
-	}
-	errRewritingFiles = provider.rewriteFile(tempFilePath, tempFile)
-	if errRewritingFiles != nil {
-		return errRewritingFiles
-	}
-	for item := range newDataBuffer.IterBuffered() {
-		provider.pointers.Set(item.Key, item.Val.(int64))
-	}
-	provider.mx.Unlock()
-	return nil
-}
-
 func (provider *fileProvider) GetIDs() []string {
 	provider.mx.Lock()
 	defer provider.mx.Unlock()
 	return provider.pointers.Keys()
-}
-
-func (provider *fileProvider) ReadAll() ([]Row, error) {
-	provider.mx.Lock()
-	defer provider.mx.Unlock()
-	var (
-		rows = make([]Row, 0)
-	)
-	scanner := bufio.NewScanner(provider.file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		var (
-			row                    Row
-			err                    error
-			convertID, convertData interface{}
-			stringID, stringData   string
-		)
-		line = strings.Split(line, "|")[0]
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		if strings.Contains(line, "=") {
-			split := strings.Split(line, "=")
-			stringID = split[0]
-			if strings.TrimSpace(stringID) == "" {
-				continue
-			}
-			stringData = split[1]
-			if strings.TrimSpace(stringData) == "" {
-				continue
-			}
-		} else {
-			continue
-		}
-		convertData, err = provider.convertDataFromString(stringData)
-		if err != nil {
-			continue
-		}
-		convertID, err = provider.convertIdFromString(stringID)
-		if err != nil {
-			continue
-		}
-		row.ID = convertID
-		row.Data = convertData
-		rows = append(rows, row)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-func (provider *fileProvider) rewriteFile(tempFilePath string, tempFile *os.File) error {
-	err := provider.file.Close()
-	if err != nil {
-		return err
-	}
-	err = os.Remove(provider.filePath)
-	if err != nil {
-		return err
-	} else {
-		provider.file = tempFile
-		provider.filePath = tempFilePath
-	}
-	return nil
-}
-
-func (provider *fileProvider) createTempFile() (string, *os.File, error) {
-	var (
-		tempFile     *os.File
-		tempFilePath = strings.ReplaceAll(
-			provider.filePath,
-			strings.Join([]string{
-				provider.fileStorageName,
-				"simstor",
-			}, "."),
-			strings.Join([]string{
-				provider.fileStorageName,
-				"-rewrite-at-",
-				strconv.FormatInt(time.Now().Unix(), 16),
-				".simstor",
-			}, ""),
-		)
-	)
-	tempFile, err := os.OpenFile(tempFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
-	if err != nil {
-		return tempFilePath, tempFile, err
-	}
-	return tempFilePath, tempFile, nil
-}
-
-func (provider *fileProvider) deleteTempFile(tempFilePath string, tempFile *os.File) error {
-	err := tempFile.Close()
-	if err != nil {
-		return err
-	}
-	err = os.Remove(tempFilePath)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (provider *fileProvider) getLine(id interface{}) (string, int64, error) {
