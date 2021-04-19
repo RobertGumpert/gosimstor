@@ -212,6 +212,7 @@ func (provider *fileProvider) Rewrite(rows []Row) error {
 	if err != nil {
 		return err
 	}
+	provider.lastPointer = 0
 	provider.pointers = concurrentMap.New()
 	for i := 0; i < len(rows); i++ {
 		err := provider.insert(rows[i])
